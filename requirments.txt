@@ -5,3 +5,4 @@ Flask-Migrate
 PyJWT
 Werkzeug
 python-dotenv
+PyMySQL
