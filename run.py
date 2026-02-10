@@ -2,6 +2,9 @@ from flask import Flask
 from app.utils.config import Config
 from app.utils.extensions import db, migrate
 from sqlalchemy import text
+from sqlalchemy.orm import sessionmaker
+from db import engine
+from models import User, Project, Task, Document, ProjectMember
 
 def create_app():
     app = Flask(__name__)
@@ -19,6 +22,15 @@ def create_app():
 
 app = create_app()
 
+SessionLocal = sessionmaker(bind=engine)
+
+db = SessionLocal()
+new_user = User(username="shivam", email="shivam@example.com",
+                password_hash="hashed_pw", role="admin")
+db.add(new_user)
+db.commit()
+print("✅ User inserted!")
+
 if __name__ == "__main__":
     app.run()  
 
@@ -29,4 +41,3 @@ with app.app_context():
         print("✅ Connected to MySQL successfully")
     except Exception as e:
         print("❌ Connection failed:", e)
-        
