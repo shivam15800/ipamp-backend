@@ -1,9 +1,7 @@
-# from .extensions import db
-from sqlalchemy import create_engine
-from models import Base
+from app.extensions import db
+from app.models import User, Project, ProjectMembers, Task, Document
 
-engine = create_engine("mysql+pymysql://shivam:12345@localhost:3306/ipamp_backend")
-
-Base.metadata.create_all(engine)
-
-print("Tables created successfully!")
+def init_db(app):
+    with app.app_context():
+        db.create_all()
+        # print("Tables created successfully!")

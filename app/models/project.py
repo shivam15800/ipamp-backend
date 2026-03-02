@@ -1,12 +1,10 @@
-from sqlalchemy import Column, Integer, String, ForeignKey
-from . import Base
+from app.extensions import db
 
-class Project(Base):
-    __tablename__="projects"
-    id = Column(Integer, primary_key=True)
-    name = Column(String(50), nullable=False)
-    description = Column(String(500))
-    owner_id = Column(Integer, ForeignKey("users.id"))
-    created_at = Column(String(50))
+class Project(db.Model):
+    __tablename__ = "projects"   
 
-
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), nullable=False)
+    description = db.Column(db.String(500))
+    owner_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, default=db.func.now())

@@ -1,12 +1,12 @@
-from sqlalchemy import Column, Integer, String, ForeignKey
-from . import Base
+from app.extensions import db
 
-class Document(Base):
-    __tablename__="documents"
-    id = Column(Integer, primary_key=True)
-    project_id = Column(Integer, ForeignKey("projects.id"))
-    filename = Column(String(200), nullable=False)
-    filepath = Column(String(500),nullable=False)
-    uploaded_by = Column(Integer, ForeignKey("users.id"))
-    uploaded_at = Column(String(50))
-    mime_type = Column(String(100))
+class Document(db.Model):
+    __tablename__ = "documents"   
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("projects.id"))
+    filename = db.Column(db.String(200), nullable=False)
+    filepath = db.Column(db.String(500), nullable=False)
+    uploaded_by = db.Column(db.Integer, db.ForeignKey("users.id"))
+    uploaded_at = db.Column(db.DateTime, default=db.func.now())
+    mime_type = db.Column(db.String(100))
