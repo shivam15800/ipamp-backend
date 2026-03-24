@@ -3,14 +3,14 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.exc import IntegrityError
 
 from app.models.user import User
+from app.models.role import Role
 from app.extensions import db
 from app.utils.jwt import generate_token
-from app.utils.decorators import login_required, role_required
-
-
+from app.utils.decorators import login_required
+from app.models.audit_log import AuditLog 
+from datetime import datetime
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api")
-
 
 # ---------------- REGISTER ----------------
 @auth_bp.route("/register", methods=["POST"])
@@ -33,9 +33,13 @@ def register():
     user = User(
         username=username,
         email=email,
-        password_hash=generate_password_hash(password),
-        role="employee"
+        password_hash=generate_password_hash(password)
     )
+
+    # 🚨 Always enforce default role, ignore client input
+    default_role = Role.query.filter_by(name="employee").first()
+    if default_role:
+        user.roles.append(default_role)
 
     try:
         db.session.add(user)
@@ -43,12 +47,25 @@ def register():
     except IntegrityError:
         db.session.rollback()
         return jsonify({"error": "User already exists"}), 400
-    except Exception:
+    except Exception as e:
         db.session.rollback()
-        return jsonify({"error": "Server error"}), 500
+        return jsonify({"error": f"Server error: {str(e)}"}), 500
+    
+    # Log action
+    try:
+        log = AuditLog(
+            action="User_created",
+            performed_by=user.id,            
+            timestamp=datetime.utcnow(),
+            ip=request.remote_addr,
+        )
+        db.session.add(log)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"Audit log failed for register: {e}")
 
     return jsonify({"message": "User created successfully"}), 201
-
 
 # ---------------- LOGIN ----------------
 @auth_bp.route("/login", methods=["POST"])
@@ -66,10 +83,7 @@ def login():
 
     user = User.query.filter_by(username=username).first()
 
-    if not user:
-        return jsonify({"error": "Invalid credentials"}), 401
-
-    if not check_password_hash(user.password_hash, password):
+    if not user or not check_password_hash(user.password_hash, password):
         return jsonify({"error": "Invalid credentials"}), 401
 
     try:
@@ -77,14 +91,29 @@ def login():
     except Exception:
         return jsonify({"error": "Token generation failed"}), 500
 
+    # Log action
+    try:
+        log = AuditLog(
+            action="login_success",
+            performed_by=user.id,            
+            timestamp=datetime.utcnow(),
+            ip=request.remote_addr,
+        )
+        db.session.add(log)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"Audit log failed for login: {e}")
+    
     return jsonify({
         "token": token,
         "user": {
             "user_id": user.id,
             "username": user.username,
-            "role": user.role
+            "roles": [role.name for role in user.roles]  # list of roles
         }
     }), 200
+
 
 
 # ---------------- PROFILE ----------------
@@ -99,6 +128,5 @@ def profile():
     return jsonify({
         "user_id": user_claims.get("user_id"),
         "username": user_claims.get("username"),
-        "role": user_claims.get("role")
+        "roles": user_claims.get("roles")
     }), 200
-
