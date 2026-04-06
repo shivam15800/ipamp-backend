@@ -51,3 +51,11 @@ def role_required(required_roles):
             return f(*args, **kwargs)
         return decorated
     return wrapper
+
+def token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not g.user:
+            return jsonify({"error": "Unauthorized"}), 401
+        return f(*args, **kwargs)
+    return decorated

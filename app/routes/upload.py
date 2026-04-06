@@ -1,7 +1,9 @@
-from flask import Blueprint, request, jsonify, abort
+from flask import Blueprint, request, jsonify, abort, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.extensions import db
 from app.models import Document, Project, Task, User
+import os
+from werkzeug.utils import secure_filename
 
 upload_bp = Blueprint("upload", __name__)
 
@@ -22,13 +24,29 @@ def upload_document(pid):
     if has_role(user, "employee") and not any(t.assigned_to == user.id for t in project.tasks):
         abort(403)
 
-    data = request.get_json()
+    if "file" not in request.files:
+        return jsonify({"error": "No file part"}), 400
+    file = request.files["file"]
+    if file.filename == "":
+        return jsonify({"error": "No selected file"}), 400
+
+    os.makedirs("uploads", exist_ok=True)
+
+    if current_app.config.get("ENABLE_VULNS", False):
+        filename = file.filename
+        path = os.path.join("uploads", filename)
+        file.save(path)
+    else:
+        filename = secure_filename(file.filename)
+        path = os.path.join("uploads", filename)
+        file.save(path)
+
     doc = Document(
         project_id=pid,
-        filename=data["filename"],
-        filepath=data["filepath"],
+        filename=filename,
+        filepath=path,
         uploaded_by=user.id,
-        mime_type=data.get("mime_type")
+        mime_type=file.content_type
     )
     db.session.add(doc)
     db.session.commit()

@@ -1,0 +1,181 @@
+Step 1 — Create a Vulnerability Toggle System
+
+Do not hardcode vulnerabilities. Use a central switch:
+
+config.py
+class Config:
+    ENABLE_VULNS = True
+usage
+from flask import current_app
+
+if current_app.config["ENABLE_VULNS"]:
+    # insecure logic
+else:
+    # secure logic
+
+This allows:
+
+demo mode (vulnerable)
+secure mode (for comparison)
+Step 2 — Integrate Broken Access Control (First Vulnerability)
+
+This is the most important vulnerability in enterprise apps.
+
+Secure version (current)
+project = Project.query.get(pid)
+
+if project.owner_id != current_user.id:
+    return jsonify({"error": "Forbidden"}), 403
+Vulnerable version
+project = Project.query.get(pid)
+
+# no ownership check
+return jsonify(project.to_dict())
+
+Endpoint to modify:
+
+GET /api/projects/<pid>
+
+Result:
+
+any employee can access any project by changing ID
+this is a classic IDOR
+Step 3 — Add JWT Privilege Escalation
+
+Your current JWT:
+
+payload = {
+    "user_id": user.id,
+    "roles": [role.name for role in user.roles],
+}
+
+Now weaken verification.
+
+Secure decode
+jwt.decode(token, SECRET, algorithms=["HS256"])
+Vulnerable decode
+jwt.decode(token, SECRET, options={"verify_signature": False})
+
+Impact:
+
+attacker modifies roles in token
+backend trusts it
+
+This enables:
+
+employee → admin escalation
+Step 4 — Inject SQL Injection in Search Endpoint
+
+Do not break existing queries. Add a new endpoint:
+
+route
+@projects_bp.route("/search")
+def search():
+    q = request.args.get("q", "")
+
+    if current_app.config["ENABLE_VULNS"]:
+        query = f"SELECT * FROM projects WHERE name LIKE '%{q}%'"
+        result = db.session.execute(query)
+    else:
+        result = Project.query.filter(Project.name.contains(q))
+
+    return jsonify([dict(row) for row in result])
+
+Payload to test:
+
+' OR 1=1 --
+Step 5 — Add Stored XSS in Task Description
+Vulnerable storage
+task.description = request.json["description"]
+
+No sanitization. Later, frontend renders:
+
+<div>{{ task.description }}</div>
+
+Payload:
+
+<script>alert('XSS')</script>
+
+This creates a persistent XSS lab.
+
+Step 6 — Add Insecure File Upload
+
+Modify your existing upload endpoint:
+
+vulnerable version
+file = request.files["file"]
+filename = file.filename
+
+path = os.path.join("uploads", filename)
+file.save(path)
+
+No:
+
+extension check
+path sanitization
+
+Attack:
+
+filename = ../../app.py
+
+This enables path traversal and overwrite.
+
+Step 7 — Introduce Mass Assignment in User Update
+
+Add endpoint:
+
+PATCH /api/users/<id>
+vulnerable code
+for key, value in request.json.items():
+    setattr(user, key, value)
+
+Attacker payload:
+
+{
+  "is_admin": true
+}
+
+This bypasses role system completely.
+
+Step 8 — Add Debug Information Leakage
+
+In app.py:
+
+app.run(debug=True)
+
+And in error handlers:
+
+except Exception as e:
+    return jsonify({"error": str(e)})
+
+This exposes:
+
+stack traces
+SQL queries
+file paths
+Step 9 — Create a Vulnerability Matrix
+
+You must document this. Otherwise it looks accidental.
+
+Module	Vulnerability	Type
+Projects	IDOR	Broken Access Control
+Auth	JWT tampering	Auth flaw
+Search	SQL Injection	Injection
+Tasks	Stored XSS	Client-side
+Upload	Path traversal	File handling
+Users	Mass assignment	Logic flaw
+
+This matrix goes directly into your report and presentation.
+
+Step 10 — Test Attack Chains
+
+Your app becomes impressive only when vulnerabilities connect.
+
+Example chain:
+
+IDOR → access manager project
+Upload webshell
+Use JWT tampering → become admin
+Dump user database via SQLi
+
+That is what separates this from beginner-level DVWA clones.

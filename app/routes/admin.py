@@ -1,22 +1,26 @@
-from flask import Blueprint, jsonify, request, g
+from flask import Blueprint, jsonify, request, g, current_app
 from app.utils.decorators import login_required, role_required
 from app.models.user import User
 from app.models.role import Role
 from app.models.audit_log import AuditLog
 from app import db
+from app.utils.decorators import token_required, role_required
+from sqlalchemy import text
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/api/admin")
 
 # ---------------- DASHBOARD ----------------
 @admin_bp.route("/dashboard", methods=["GET"])
-@login_required
+# @login_required
+@token_required
 @role_required("admin")
 def dashboard():
     return jsonify({"message": "Welcome Admin"}), 200
 
 # ---------------- LIST USERS ----------------
 @admin_bp.route("/users", methods=["GET"])
-@login_required
+# @login_required
+@token_required
 @role_required("admin")
 def list_users():
     try:
@@ -38,7 +42,8 @@ def list_users():
 
 # ---------------- GET USER ----------------
 @admin_bp.route("/users/<int:user_id>", methods=["GET"])
-@login_required
+#@login_required
+@token_required
 @role_required("admin")
 def get_user(user_id):
     try:
@@ -57,7 +62,8 @@ def get_user(user_id):
 
 # ---------------- CHANGE ROLES ----------------
 @admin_bp.route("/users/<int:user_id>/roles", methods=["PATCH"])
-@login_required
+# @login_required
+@token_required
 @role_required("admin")
 def change_roles(user_id):
     try:
@@ -101,7 +107,8 @@ def change_roles(user_id):
 
 # ---------------- DELETE USER ----------------
 @admin_bp.route("/users/<int:user_id>", methods=["DELETE"])
-@login_required
+# @login_required
+@token_required
 @role_required("admin")
 def delete_user(user_id):
     try:
@@ -130,7 +137,8 @@ def delete_user(user_id):
 
 # ---------------- CHANGE STATUS ----------------
 @admin_bp.route("/users/<int:user_id>/status", methods=["PATCH"])
-@login_required
+# @login_required
+@token_required
 @role_required("admin")
 def change_status(user_id):
     try:
@@ -159,7 +167,8 @@ def change_status(user_id):
 
 # ---------------- VIEW AUDIT LOGS ----------------
 @admin_bp.route("/audit-logs", methods=["GET"])
-@login_required
+# @login_required
+@token_required
 @role_required("super_admin")  # only super_admin can view logs
 def get_audit_logs():
     logs = AuditLog.query.order_by(AuditLog.timestamp.desc()).all()
@@ -176,3 +185,28 @@ def get_audit_logs():
         for log in logs
     ]
     return jsonify({"logs": logs_data}), 200
+
+# ---------------- ADMIN SEARCH USERS ----------------
+from flask import request, jsonify, current_app
+from sqlalchemy import text
+from app.db import db
+
+@admin_bp.route("/search-users", methods=["GET"])
+@token_required
+@role_required("admin")
+def search_users_admin():
+    q = request.args.get("q", "")
+
+    try:
+        if current_app.config.get("ENABLE_VULNS", False):
+            sql = text(f"SELECT id, username, email, status FROM users WHERE username LIKE '%{q}%'")
+            result = db.session.execute(sql).fetchall()
+        else:
+            sql = text("SELECT id, username, email, status FROM users WHERE username LIKE :q")
+            result = db.session.execute(sql, {"q": f"%{q}%"}).fetchall()
+
+        users_data = [dict(row._mapping) for row in result]
+
+        return jsonify({"users": users_data}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

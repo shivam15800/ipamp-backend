@@ -12,3 +12,9 @@ class Config:
     JWT_TOKEN_LOCATION = ["headers"]
     JWT_HEADER_NAME = "Authorization"
     JWT_HEADER_TYPE = "Bearer"
+
+class SecureConfig(Config):
+    ENABLE_VULNS = False
+
+class VulnConfig(Config):
+    ENABLE_VULNS = True

@@ -1,6 +1,7 @@
 import jwt
 from datetime import datetime, timedelta
 from app.config import Config
+from flask import current_app 
 
 def generate_token(user):
     payload = {
@@ -19,3 +20,9 @@ def generate_token(user):
     )
 
     return token
+
+def decode_token(token):
+    if current_app.config["ENABLE_VULNS"]:
+        return jwt.decode(token, Config.JWT_SECRET_KEY, options={"verify_signature": False})
+    else:
+        return jwt.decode(token, Config.JWT_SECRET_KEY, algorithms=["HS256"])

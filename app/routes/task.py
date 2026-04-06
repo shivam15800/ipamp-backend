@@ -21,7 +21,7 @@ def list_my_tasks():
     user = current_user()
     tasks = Task.query.filter_by(assigned_to=user.id).all()
     return jsonify([
-        {"id": t.id, "title": t.title, "status": t.status, "project_id": t.project_id}
+        {"id": t.id, "title": t.title, "description": t.description, "status": t.status, "project_id": t.project_id}
         for t in tasks
     ])
 
@@ -38,7 +38,7 @@ def list_project_tasks(pid):
         tasks = Task.query.filter_by(project_id=pid, assigned_to=user.id).all()
 
     return jsonify([
-        {"id": t.id, "title": t.title, "status": t.status, "assigned_to": t.assigned_to}
+        {"id": t.id, "title": t.title, "description": t.description, "status": t.status, "assigned_to": t.assigned_to}
         for t in tasks
     ])
 
@@ -55,6 +55,7 @@ def assign_task(pid):
         project_id=pid,
         assigned_to=data["assigned_to"],
         title=data["title"],
+        description=data.get("description", ""),
         status=data.get("status", "pending"),
         created_by=user.id
     )
@@ -76,7 +77,7 @@ def assign_task(pid):
         db.session.rollback()
         print(f"Audit log failed for assign task: {e}")
     
-    return jsonify({"id": task.id, "title": task.title}), 201
+    return jsonify({"id": task.id, "title": task.title, "description": task.description}), 201
 
 # Update Task (status for assignee, title for manager/admin)
 @tasks_bp.route("/tasks/<int:tid>", methods=["PATCH"])
@@ -95,8 +96,10 @@ def update_task(tid):
             task.status = data["status"]
         if "title" in data and has_role(user, "manager", "admin"):
             task.title = data["title"]
+        if "description" in data:
+            task.description = data["description"]
         db.session.commit()
-        return jsonify({"id": task.id, "title": task.title, "status": task.status})
+        return jsonify({"id": task.id, "title": task.title, "description": task.description, "status": task.status})
     abort(403)
 
 # Delete Task (admin or project owner only)
