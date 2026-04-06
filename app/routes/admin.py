@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request, g, current_app
 from app.utils.decorators import login_required, role_required
 from app.models.user import User
 from app.models.role import Role
+from app.models.project import Project
 from app.models.audit_log import AuditLog
 from app import db
 from app.utils.decorators import token_required, role_required
@@ -90,15 +91,20 @@ def change_roles(user_id):
 
         db.session.commit()
 
-        # Log action
-        log = AuditLog(
-            action=f"Changed roles of user {user.id} to {new_roles}",
-            performed_by=g.user["user_id"],
-            target_user=user.id,
-            ip=log.ip
-        )
-        db.session.add(log)
-        db.session.commit()
+        if not current_app.config.get("ENABLE_VULNS", False):
+            # Log action
+            try:
+                log = AuditLog(
+                    action=f"Changed roles of user {user.id} to {new_roles}",
+                    performed_by=g.user["user_id"],
+                    target_user=user.id,
+                    ip=log.ip
+                )
+                db.session.add(log)
+                db.session.commit()
+            except Exception as e:
+                db.session.rollback()
+                print(f"Audit log failed for change_roles: {e}")
 
         return jsonify({"message": "Roles updated successfully"}), 200
     except Exception as e:
@@ -210,3 +216,59 @@ def search_users_admin():
         return jsonify({"users": users_data}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    
+
+# Search Projects (Vulnerable to SQL Injection)
+@admin_bp.route("/search-projects", methods=["GET"])
+@token_required
+@role_required("admin")
+def search_projects():
+    q = request.args.get("q", "")
+
+    if current_app.config.get("ENABLE_VULNS", False):
+        query = text(f"SELECT id, name, description, owner_id FROM projects WHERE name LIKE '%{q}%'")
+        result = db.session.execute(query).fetchall()
+        return jsonify([dict(row._mapping) for row in result])
+    else:
+        projects = Project.query.filter(Project.name.contains(q)).all()
+        return jsonify([{"id": p.id, "name": p.name, "description": p.description, "owner_id": p.owner_id} for p in projects])
+
+# ---------------- UPDATE USER (MASS ASSIGNMENT VULNERABILITY) ----------------
+@admin_bp.route("/users/update-uers/<int:user_id>", methods=["PATCH"])
+@token_required
+def update_user(user_id):
+    user_claims = g.get("user")
+    if not user_claims:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    # In a secure app, we'd check if user_claims["user_id"] == user_id or if user is admin
+    vulnerable = current_app.config.get("ENABLE_VULNS", False)
+    
+    if not vulnerable and user_claims["user_id"] != user_id:
+        # Secure version checks access
+        return jsonify({"error": "Forbidden"}), 403
+
+    user = User.query.get_or_404(user_id)
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "Invalid JSON"}), 400
+
+    if vulnerable:
+        # Vulnerable context: Mass assignment
+        for key, value in data.items():
+            setattr(user, key, value)
+    else:
+        # Secure context: only allow specific fields like email
+        if "email" in data:
+            user.email = data["email"]
+        if "username" in data:
+            user.username = data["username"]
+        # Explicitly ignoring status, roles, password directly without logic
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+    return jsonify({"message": "User updated", "user_id": user.id}), 200

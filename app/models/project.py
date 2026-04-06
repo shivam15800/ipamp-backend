@@ -9,6 +9,6 @@ class Project(db.Model):
     owner_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     created_at = db.Column(db.DateTime, default=db.func.now())
 
-    #added these lines
-    task = db.relationship("Task", backref="project", lazy=True)
+    #added lines
+    tasks = db.relationship("Task", backref="project", lazy=True)
     document = db.relationship("Document", backref="project", lazy=True)
