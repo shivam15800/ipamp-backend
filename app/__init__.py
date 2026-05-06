@@ -1,10 +1,12 @@
 from flask import Flask, request, g
 from app.config import Config
-from app.extensions import db, migrate
+from app.extensions import db
 from flask_jwt_extended import JWTManager
 from .utils.jwt import decode_token
+from flask_migrate import Migrate
 
 jwt = JWTManager()
+
 
 def create_app(Config):
     app = Flask(__name__)
@@ -22,6 +24,8 @@ def create_app(Config):
             g.user = decode_token(token)
         except Exception:
             g.user = None
+
+    migrate = Migrate(app, db)
 
     # Initialize extensions
     db.init_app(app)

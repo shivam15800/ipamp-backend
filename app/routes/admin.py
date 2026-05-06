@@ -175,7 +175,7 @@ def change_status(user_id):
 @admin_bp.route("/audit-logs", methods=["GET"])
 # @login_required
 @token_required
-@role_required("super_admin")  # only super_admin can view logs
+@role_required("super_admin")  # only super_admin
 def get_audit_logs():
     logs = AuditLog.query.order_by(AuditLog.timestamp.desc()).all()
     logs_data = [
